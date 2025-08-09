@@ -1,3 +1,7 @@
-from streamlit_keypress.frontend import key_press_events
+# streamlit_hotkeys/__init__.py
+from __future__ import annotations
 
-__all__ = ["key_press_events"]
+from .manager import hk, activate, pressed, preload_css
+
+__all__ = ["hk", "activate", "pressed", "preload_css"]
+__version__ = "0.3.0"
