@@ -1,26 +1,28 @@
 import streamlit as st
 import streamlit_hotkeys as hotkeys
 
-st.title("Basic hotkeys")
 
-# Activate early
 hotkeys.activate([
-    hotkeys.hk("plain_k", "k", help="Show K message"),
-    hotkeys.hk("open_palette", "k", meta=True, help="Open command palette"),
-    hotkeys.hk("open_palette", "k", ctrl=True, help="Open command palette"),
-    hotkeys.hk("enter", "Enter", help="Confirm / Run"),
+    hotkeys.hk("palette", "k", meta=True, help="Open palette (mac)"),
+    hotkeys.hk("palette", "k", ctrl=True, help="Open palette (win/linux)"),
+    hotkeys.hk("save", "s", ctrl=True, prevent_default=True, help="Save"),
     hotkeys.hk("show_legend", "?", shift=True, help="Show shortcuts"),
 ], key="global")
 
-# Actions
-if hotkeys.pressed("plain_k"):
-    st.success("You pressed: K")
 
-if hotkeys.pressed("open_palette"):
-    st.info("Open palette")
+def save():
+    st.toast("Saved!")
 
-if hotkeys.pressed("enter"):
-    st.write("Enter pressed")
+
+if hotkeys.pressed("save"):
+    st.info("Thank you for saving")
+
+hotkeys.on_pressed("save", save)
+
+
+@hotkeys.on_pressed("palette")
+def open_palette():
+    st.info("Palette opened")
 
 
 @st.dialog("Keyboard Shortcuts")
@@ -28,11 +30,7 @@ def _shortcuts_dialog():
     hotkeys.legend()
 
 
-# Open with Shift+?
 if hotkeys.pressed("show_legend"):
     _shortcuts_dialog()
 
-
-# Optional button for mouse users
-if st.button("See Shortcuts"):
-    _shortcuts_dialog()
+st.write("Press Cmd/Ctrl+K, Ctrl+S or Shift+?")

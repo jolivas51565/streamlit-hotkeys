@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from typing import Any, Dict, List, Mapping, Optional
+from typing import Any, Dict, List, Mapping, Optional, Callable
 
 import streamlit as st
 import streamlit.components.v1 as components
@@ -28,6 +28,14 @@ def _last_event_key(manager_key: str) -> str:
 
 def _per_id_seq_key(manager_key: str) -> str:
     return f"__hk_last_seq_by_id__::{manager_key}"
+
+
+def _callbacks_key(manager_key: str) -> str:
+    return f"__hk_callbacks__::{manager_key}"
+
+
+def _callbacks_seq_key(manager_key: str) -> str:
+    return f"__hk_last_cb_seq_by_id__::{manager_key}"
 
 
 def preload_css(*, key: str = "global") -> None:
@@ -226,6 +234,31 @@ def _render_manager(bindings: List[Dict[str, Any]], *, key: str, debug: bool) ->
     return _EventView(payload, manager_key=key)
 
 
+def _run_callbacks(manager_key: str) -> None:
+    """Dispatch registered callbacks for the id that fired (if any),
+    without consuming the event for pressed()."""
+    payload = st.session_state.get(_last_event_key(manager_key))
+    if not isinstance(payload, dict):
+        return
+
+    event_id = payload.get("id")
+    seq = int(payload.get("seq") or 0)
+    if not event_id:
+        return
+
+    callbacks = st.session_state.get(_callbacks_key(manager_key), {})
+    if not callbacks or event_id not in callbacks:
+        return
+
+    # Ensure we run each callback set ONCE per seq, but don't affect pressed()
+    cb_store = st.session_state.setdefault(_callbacks_seq_key(manager_key), {})
+    last_run = int(cb_store.get(event_id, 0))
+    if seq > last_run:
+        for fn, args, kwargs in callbacks[event_id]:
+            fn(*args, **(kwargs or {}))
+        cb_store[event_id] = seq
+
+
 # -------- Public API -----------------------------------------------------
 
 def activate(
@@ -250,6 +283,7 @@ def activate(
     normalized = _normalize_bindings_args(*bindings)
     st.session_state[_bindings_key(key)] = normalized
     _render_manager(normalized, key=key, debug=debug)
+    _run_callbacks(key)
 
 
 def pressed(binding_id: str, *, key: str = "global") -> bool:
@@ -275,6 +309,49 @@ def pressed(binding_id: str, *, key: str = "global") -> bool:
         view = _EventView(payload, manager_key=key)
 
     return view.pressed(binding_id)
+
+
+def on_pressed(
+    binding_id: str,
+    callback: Callable | None = None,
+    *,
+    key: str = "global",
+    args: tuple = (),
+    kwargs: Optional[dict] = None,
+):
+    """
+    Register a callback to run exactly once per press of `binding_id`.
+
+    Usage:
+        hotkeys.on_pressed("save", save_fn)  # simple
+        hotkeys.on_pressed("save", save_fn, args=(42,), kwargs={"force": True})
+
+    Or as a decorator:
+        @hotkeys.on_pressed("save")
+        def save_fn():
+            ...
+
+    Notes:
+      - Works alongside `hotkeys.pressed(...)`.
+      - Safe with duplicate bindings (same id: e.g., Cmd+K or Ctrl+K).
+    """
+    if not binding_id:
+        raise ValueError("on_pressed(): 'binding_id' is required")
+
+    store = st.session_state.setdefault(_callbacks_key(key), {})
+    if kwargs is None:
+        kwargs = {}
+
+    def _register(fn: Callable):
+        lst = store.setdefault(binding_id, [])
+        lst.append((fn, args, kwargs))
+        return fn
+
+    if callback is None:
+        # decorator form
+        return _register
+    else:
+        return _register(callback)
 
 
 def legend(*, key: str = "global") -> None:

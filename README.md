@@ -25,26 +25,33 @@ pip install streamlit-hotkeys
 import streamlit as st
 import streamlit_hotkeys as hotkeys
 
-st.set_page_config(page_title="Hotkeys Demo")
-
-# Activate early so the manager is hidden from the first frame
 hotkeys.activate([
-    hotkeys.hk("palette", "k", meta=True),                # Cmd+K (macOS)
-    hotkeys.hk("palette", "k", ctrl=True),                # Ctrl+K (Windows/Linux)
-    hotkeys.hk("save", "s", ctrl=True, prevent_default=True), # Ctrl+S (block browser save)
-    hotkeys.hk("down", "ArrowDown"),
+    hotkeys.hk("palette", "k", meta=True, help="Open palette (mac)"),
+    hotkeys.hk("palette", "k", ctrl=True, help="Open palette (win/linux)"),
+    hotkeys.hk("save", "s", ctrl=True, prevent_default=True, help="Save"),
+    hotkeys.hk("show_legend", "?", shift=True, help="Show shortcuts"),
 ], key="global")
 
-st.title("Hotkeys demo")
-
-if hotkeys.pressed("palette"):
-    st.success("Open palette")
-
-if hotkeys.pressed("save"):
+def save():
     st.success("Saved!")
+    
+if hotkeys.pressed("save"):
+    st.info("Thank you for saving")
 
-if hotkeys.pressed("down"):
-    st.write("Move selection down")
+hotkeys.on_pressed("save", save)
+
+@hotkeys.on_pressed("palette")
+def open_palette():
+    st.info("Palette opened")
+    
+@st.dialog("Keyboard Shortcuts")
+def _shortcuts_dialog():
+    hotkeys.legend()
+
+if hotkeys.pressed("show_legend"):
+    _shortcuts_dialog()
+
+st.write("Press Cmd/Ctrl+K, Ctrl+S or Shift+?")
 ```
 
 ## Features
