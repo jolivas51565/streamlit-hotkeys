@@ -30,7 +30,7 @@ Source = "https://github.com/viktor-shcherb/streamlit-hotkeys"
 "Similar: streamlit-keypress" = "https://pypi.org/project/streamlit-keypress/"
 "Similar: streamlit-shortcuts" = "https://pypi.org/project/streamlit-shortcuts/"
 "Similar: streamlit-keyup" = "https://pypi.org/project/streamlit-keyup/"
-"Similar: keyboard_to_url (streamlit-extras)" = "https://arnaudmiribel.github.io/streamlit-extras/extras/keyboard_url/"
+"Similar: keyboard_to_url" = "https://arnaudmiribel.github.io/streamlit-extras/extras/keyboard_url/"
 
 [tool.setuptools]
 include-package-data = true

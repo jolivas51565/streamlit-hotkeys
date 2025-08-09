@@ -126,12 +126,12 @@ if hotkeys.pressed("palette"):
 * [streamlit-keypress] - Original "keypress to Python" component by Sudarsan.
 * [streamlit-shortcuts] - Keyboard shortcuts for buttons and widgets; supports multiple bindings and hints.
 * [streamlit-keyup] - Text input that emits on every keyup (useful for live filtering).
-* [keyboard\_to\_url (streamlit-extras)][keyboard_to_url (streamlit-extras)] - Bind a key to open a URL in a new tab.
+* [keyboard\_to\_url][keyboard_to_url] - Bind a key to open a URL in a new tab.
 
 [streamlit-keypress]: https://pypi.org/project/streamlit-keypress/
 [streamlit-shortcuts]: https://pypi.org/project/streamlit-shortcuts/
 [streamlit-keyup]: https://pypi.org/project/streamlit-keyup/
-[keyboard_to_url (streamlit-extras)]: https://arnaudmiribel.github.io/streamlit-extras/extras/keyboard_url/
+[keyboard_to_url]: https://arnaudmiribel.github.io/streamlit-extras/extras/keyboard_url/
 
 ## Credits
 
