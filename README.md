@@ -29,15 +29,15 @@ st.set_page_config(page_title="Hotkeys Demo")
 
 # Activate early so the manager is hidden from the first frame
 hotkeys.activate([
-    hotkeys.hk("palette_mac", "k", meta=True),                # Cmd+K (macOS)
-    hotkeys.hk("palette_win", "k", ctrl=True),                # Ctrl+K (Windows/Linux)
+    hotkeys.hk("palette", "k", meta=True),                # Cmd+K (macOS)
+    hotkeys.hk("palette", "k", ctrl=True),                # Ctrl+K (Windows/Linux)
     hotkeys.hk("save", "s", ctrl=True, prevent_default=True), # Ctrl+S (block browser save)
     hotkeys.hk("down", "ArrowDown"),
 ], key="global")
 
 st.title("Hotkeys demo")
 
-if hotkeys.pressed("palette_mac") or hotkeys.pressed("palette_win"):
+if hotkeys.pressed("palette"):
     st.success("Open palette")
 
 if hotkeys.pressed("save"):
@@ -47,60 +47,19 @@ if hotkeys.pressed("down"):
     st.write("Move selection down")
 ```
 
-### Multi-page tip
-
-In multi-page apps, call `activate(...)` near the top of **every page**, or from a small helper module that each page imports. Example layout:
-
-```
-streamlit_app/
-├─ app.py
-├─ hotkeys_config.py
-└─ pages/
-   ├─ 01_Editor.py
-   └─ 02_Viewer.py
-```
-
-`hotkeys_config.py`
-
-```python
-import streamlit_hotkeys as hotkeys
-
-def activate_hotkeys():
-    hotkeys.activate([
-        hotkeys.hk("palette_mac", "k", meta=True),
-        hotkeys.hk("palette_win", "k", ctrl=True),
-        hotkeys.hk("save_cmd", "s", meta=True, prevent_default=True),
-        hotkeys.hk("save_ctrl", "s", ctrl=True, prevent_default=True),
-        hotkeys.hk("next", "ArrowRight"),
-        hotkeys.hk("prev", "ArrowLeft"),
-    ], key="global")
-```
-
-Use on any page:
-
-```python
-import streamlit as st
-import streamlit_hotkeys as hotkeys
-from hotkeys_config import activate_hotkeys
-
-activate_hotkeys()  # as early as possible
-
-st.title("Editor")
-
-if hotkeys.pressed("save_cmd") or hotkeys.pressed("save_ctrl"):
-    st.success("Saved")
-```
-
-![Demo Usage](docs/image.png)
-
 ## Features
 
-* Single invisible manager iframe that handles many bindings at once.
-* Edge-triggered events - exactly once per press.
-* Modifiers: `ctrl`, `alt`, `shift`, `meta` (Cmd on macOS).
-* Optional `preventDefault` for browser-owned shortcuts (for example, `Ctrl/Cmd+S`).
-* `KeyboardEvent.code` support (layout-independent physical keys).
-* `ignore_repeat` to suppress repeated events while a key is held.
+- Single invisible **manager** (one iframe for the whole page)
+- Activates early and auto-collapses its iframe to avoid layout flicker
+- Edge-triggered events (per-id seq; no sticky booleans)
+- Bind single keys or modifier combos (`ctrl`, `alt`, `shift`, `meta`)
+- Reuse the **same `id`** across multiple bindings (e.g., Cmd+K **or** Ctrl+K → `palette`)
+- `prevent_default` to block browser shortcuts (e.g., Ctrl/Cmd+S)
+- Layout-independent physical keys via `code="KeyK"` / `code="Digit1"`
+- `ignore_repeat` to suppress repeats while a key is held
+- Built-in legend: add `help="..."` in `hk(...)` and call `hotkeys.legend()`
+- Multi-page friendly; use `key=` for multiple independent managers
+- Optional `debug=True` to log matches in the browser console
 
 ## API
 
@@ -118,6 +77,7 @@ hk(
   meta: bool | None = False,
   ignore_repeat: bool = True,
   prevent_default: bool = False,
+  help: str | None = None,          # text shown in the legend (optional)
 ) -> dict
 ```
 
@@ -129,13 +89,31 @@ Register bindings and render the single manager. Accepts `hk(...)` dicts, a list
 
 Return `True` exactly once when the binding `id` fires.
 
-## Examples
+### `legend(*, key="global") -> None`
 
-* Command palette (`Cmd/Ctrl+K`) with arrow navigation and Enter to confirm.
-* Save shortcut (`Ctrl/Cmd+S`) with `prevent_default=True`.
-* Physical key binding via `code="KeyY"` regardless of layout.
+Render a grouped shortcuts list (merges multiple bindings that share the same `id`, and shows the first non-empty `help` string per id). 
 
-See the `examples/` folder for complete scripts.
+### Shortcuts Legend Example
+
+```python
+import streamlit as st
+import streamlit_hotkeys as hotkeys
+
+hotkeys.activate({
+    "palette": [
+        {"key": "k", "meta": True,  "help": "Open command palette"},
+        {"key": "k", "ctrl": True},  # same id, second combo
+    ],
+    "save": {"key": "s", "ctrl": True, "prevent_default": True, "help": "Save document"},
+}, key="global")
+
+@st.dialog("Keyboard Shortcuts")
+def _shortcuts():
+    hotkeys.legend()  # no title parameter required
+
+if hotkeys.pressed("palette"):
+    _shortcuts()
+```
 
 ## Notes and limitations
 

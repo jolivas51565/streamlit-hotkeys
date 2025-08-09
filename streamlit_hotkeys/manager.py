@@ -1,4 +1,3 @@
-# streamlit_hotkeys/manager.py
 from __future__ import annotations
 
 import os
@@ -63,28 +62,30 @@ def preload_css(*, key: str = "global") -> None:
 # -------- Public helper to define a binding --------
 
 def hk(
-    id: str,
-    key: Optional[str] = None,
-    *,
-    code: Optional[str] = None,
-    alt: Optional[bool] = False,
-    ctrl: Optional[bool] = False,
-    shift: Optional[bool] = False,
-    meta: Optional[bool] = False,
-    ignore_repeat: bool = True,
-    prevent_default: bool = False,
+        id: str,
+        key: Optional[str] = None,
+        *,
+        code: Optional[str] = None,
+        alt: Optional[bool] = False,
+        ctrl: Optional[bool] = False,
+        shift: Optional[bool] = False,
+        meta: Optional[bool] = False,
+        ignore_repeat: bool = True,
+        prevent_default: bool = False,
+        help: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Create a hotkey binding for the manager.
 
     Args:
-        id: Unique identifier string (you'll use this in pressed(id)).
+        id: Identifier string used with pressed(id). You may reuse the same id across multiple bindings.
         key: KeyboardEvent.key (e.g., "k", "Enter", "ArrowDown").
         code: KeyboardEvent.code (e.g., "KeyK"). If provided, 'key' is ignored.
         alt/ctrl/shift/meta:
             True=require pressed, False=forbid, None=ignore.
         ignore_repeat: Ignore held-key repeats.
         prevent_default: Prevent browser default on match (e.g., Ctrl/Cmd+S).
+        help: Optional human-readable description to show in the legend.
     """
     if not id:
         raise ValueError("hk(): 'id' is required and must be non-empty")
@@ -100,6 +101,7 @@ def hk(
         "meta": meta,
         "ignoreRepeat": bool(ignore_repeat),
         "preventDefault": bool(prevent_default),
+        "help": help,
     }
 
 
@@ -136,8 +138,8 @@ class _EventView:
 # -------- Internal: normalize bindings passed to activate() --------
 
 def _normalize_bindings_args(
-    *bindings: Any,
-    mapping: Optional[Mapping[str, Mapping[str, Any]]] = None
+        *bindings: Any,
+        mapping: Optional[Mapping[str, Mapping[str, Any]]] = None
 ) -> List[Dict[str, Any]]:
     """
     Accepts:
@@ -169,29 +171,45 @@ def _normalize_bindings_args(
         out.append(b)
 
     # Mapping id -> spec
+    # Mapping id -> spec OR id -> [spec, spec, ...]
     if mapping:
         for _id, spec in mapping.items():
-            if not isinstance(spec, Mapping):
-                raise ValueError("activate(): mapping values must be dict-like")
-            out.append(
-                hk(
-                    id=_id,
-                    key=spec.get("key"),
-                    code=spec.get("code"),
-                    alt=spec.get("alt", False),
-                    ctrl=spec.get("ctrl", False),
-                    shift=spec.get("shift", False),
-                    meta=spec.get("meta", False),
-                    ignore_repeat=spec.get("ignore_repeat", True),
-                    prevent_default=spec.get("prevent_default", False),
+            if isinstance(spec, Mapping):
+                out.append(
+                    hk(
+                        id=_id,
+                        key=spec.get("key"),
+                        code=spec.get("code"),
+                        alt=spec.get("alt", False),
+                        ctrl=spec.get("ctrl", False),
+                        shift=spec.get("shift", False),
+                        meta=spec.get("meta", False),
+                        ignore_repeat=spec.get("ignore_repeat", True),
+                        prevent_default=spec.get("prevent_default", False),
+                        help=spec.get("help"),
+                    )
                 )
-            )
-
-    # Ensure unique ids (last wins)
-    dedup: Dict[str, Dict[str, Any]] = {}
-    for b in out:
-        dedup[b["id"]] = b
-    return list(dedup.values())
+            elif isinstance(spec, (list, tuple)):
+                for s in spec:
+                    if not isinstance(s, Mapping):
+                        raise ValueError("activate(): each item in list must be a dict-like spec")
+                    out.append(
+                        hk(
+                            id=_id,
+                            key=s.get("key"),
+                            code=s.get("code"),
+                            alt=s.get("alt", False),
+                            ctrl=s.get("ctrl", False),
+                            shift=s.get("shift", False),
+                            meta=s.get("meta", False),
+                            ignore_repeat=s.get("ignore_repeat", True),
+                            prevent_default=s.get("prevent_default", False),
+                            help=s.get("help"),
+                        )
+                    )
+            else:
+                raise ValueError("activate(): mapping values must be a dict or a list of dicts")
+    return out
 
 
 # -------- Core: render manager + store last payload for pressed() --------
@@ -211,9 +229,9 @@ def _render_manager(bindings: List[Dict[str, Any]], *, key: str, debug: bool) ->
 # -------- Public API -----------------------------------------------------
 
 def activate(
-    *bindings: Any,
-    key: str = "global",
-    debug: bool = False,
+        *bindings: Any,
+        key: str = "global",
+        debug: bool = False,
 ) -> None:
     """
     Configure and activate the single hotkeys manager (render the iframe once).
@@ -257,3 +275,81 @@ def pressed(binding_id: str, *, key: str = "global") -> bool:
         view = _EventView(payload, manager_key=key)
 
     return view.pressed(binding_id)
+
+
+def legend(*, key: str = "global") -> None:
+    """
+    Render a simple, grouped legend of the active shortcuts.
+    - Groups multiple bindings that share the same id (e.g., Cmd+K / Ctrl+K).
+    - Shows any 'help' text attached to a binding (first non-empty wins per id).
+    """
+    bindings = st.session_state.get(_bindings_key(key), [])
+    if not bindings:
+        st.info("No hotkeys configured.")
+        return
+
+    def _fmt_keyname(b: Dict[str, Any]) -> str:
+        # Prefer .key label; fall back to .code for physical keys
+        key = b.get("key")
+        code = b.get("code")
+
+        def sym(k: str) -> str:
+            if k == " " or k == "Space":
+                return "Space"
+            if k == "Escape":
+                return "Esc"
+            if k == "ArrowLeft":
+                return "←"
+            if k == "ArrowRight":
+                return "→"
+            if k == "ArrowUp":
+                return "↑"
+            if k == "ArrowDown":
+                return "↓"
+            return k
+
+        if key:
+            k = key.upper() if len(key) == 1 else key
+            return sym(k)
+        if code:
+            # Turn KeyK -> K, Digit1 -> 1; else show raw code
+            if code.startswith("Key") and len(code) == 4:
+                return code[-1]
+            if code.startswith("Digit") and len(code) == 6:
+                return code[-1]
+            return code
+        return "?"
+
+    def _combo_label(b: Dict[str, Any]) -> str:
+        parts = []
+        if b.get("ctrl"):  parts.append("Ctrl")
+        if b.get("alt"):   parts.append("Alt")
+        if b.get("shift"): parts.append("Shift")
+        if b.get("meta"):  parts.append("Cmd")  # shown as Cmd for familiarity
+        parts.append(_fmt_keyname(b))
+        return "+".join(parts)
+
+    # Group combos by id
+    grouped: Dict[str, Dict[str, Any]] = {}
+    for b in bindings:
+        _id = b.get("id")
+        if not _id:
+            continue
+        item = grouped.setdefault(_id, {"combos": [], "help": None})
+        item["combos"].append(f"`{_combo_label(b)}`")
+        if not item["help"]:
+            h = b.get("help")
+            if isinstance(h, str) and h.strip():
+                item["help"] = h.strip()
+
+    # Render a compact table
+    import pandas as pd
+    rows = []
+    for _id, info in grouped.items():
+        rows.append({
+            "Shortcut": " / ".join(info["combos"]),
+            "Help": info["help"] or "",
+        })
+    df = pd.DataFrame(rows, columns=["Shortcut", "Help"]).set_index("Shortcut")
+
+    st.table(df)
