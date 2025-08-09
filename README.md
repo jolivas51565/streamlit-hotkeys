@@ -102,14 +102,14 @@ import streamlit_hotkeys as hotkeys
 hotkeys.activate({
     "palette": [
         {"key": "k", "meta": True,  "help": "Open command palette"},
-        {"key": "k", "ctrl": True},  # same id, second combo
+        {"key": "k", "ctrl": True}, 
     ],
     "save": {"key": "s", "ctrl": True, "prevent_default": True, "help": "Save document"},
 }, key="global")
 
 @st.dialog("Keyboard Shortcuts")
 def _shortcuts():
-    hotkeys.legend()  # no title parameter required
+    hotkeys.legend()  
 
 if hotkeys.pressed("palette"):
     _shortcuts()
