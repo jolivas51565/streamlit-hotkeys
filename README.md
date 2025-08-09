@@ -1,7 +1,3 @@
-Here’s a cleaned-up README that matches your new API and adds practical examples.
-
----
-
 # Streamlit Keypress
 
 A Streamlit component that captures keyboard **hotkeys** (e.g., `Ctrl+K`, `Cmd+Enter`) anywhere in your app and triggers your Python code **once per press**.
