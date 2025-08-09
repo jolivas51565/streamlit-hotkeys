@@ -1,0 +1,10 @@
+[project]
+keywords = ["streamlit", "hotkeys", "shortcuts", "keyboard", "keypress", "component"]
+
+[project.urls]
+Source = "https://github.com/viktor-shcherb/streamlit-hotkeys"
+"Issue Tracker" = "https://github.com/viktor-shcherb/streamlit-hotkeys/issues"
+"Similar: streamlit-keypress" = "https://pypi.org/project/streamlit-keypress/"
+"Similar: streamlit-shortcuts" = "https://pypi.org/project/streamlit-shortcuts/"
+"Similar: streamlit-keyup" = "https://pypi.org/project/streamlit-keyup/"
+"Similar: keyboard_to_url (streamlit-extras)" = "https://arnaudmiribel.github.io/streamlit-extras/extras/keyboard_url/"
