@@ -1,4 +1,4 @@
-# streamlit-hotkeys
+# Streamlit Hotkeys
 
 [![PyPI](https://img.shields.io/pypi/v/streamlit-hotkeys.svg)](https://pypi.org/project/streamlit-hotkeys/)
 [![Python Versions](https://img.shields.io/pypi/pyversions/streamlit-hotkeys.svg)](https://pypi.org/project/streamlit-hotkeys/)
