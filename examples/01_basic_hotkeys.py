@@ -2,6 +2,12 @@ import streamlit as st
 import streamlit_hotkeys as hotkeys
 
 
+if "n_render" not in st.session_state:
+    st.session_state.n_render = 0
+st.write(f"Render: {st.session_state.n_render}")
+st.session_state.n_render += 1
+
+
 hotkeys.activate([
     hotkeys.hk("palette", "k", meta=True, help="Open palette (mac)"),
     hotkeys.hk("palette", "k", ctrl=True, help="Open palette (win/linux)"),
@@ -17,12 +23,20 @@ def save():
 if hotkeys.pressed("save"):
     st.info("Thank you for saving")
 
+if hotkeys.pressed("save"):
+    st.info("Thank you for saving 2")
+
 hotkeys.on_pressed("save", save)
 
 
 @hotkeys.on_pressed("palette")
 def open_palette():
     st.info("Palette opened")
+
+
+@hotkeys.on_pressed("palette")
+def open_palette2():
+    st.info("Palette opened 2")
 
 
 @st.dialog("Keyboard Shortcuts")

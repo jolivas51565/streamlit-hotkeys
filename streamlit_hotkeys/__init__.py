@@ -3,4 +3,4 @@ from __future__ import annotations
 from .manager import hk, activate, pressed, on_pressed, preload_css, legend
 
 __all__ = ["hk", "activate", "pressed", "on_pressed", "preload_css", "legend"]
-__version__ = "0.4.0"
+__version__ = "0.5.0"

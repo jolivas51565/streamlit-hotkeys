@@ -30,6 +30,10 @@ def _per_id_seq_key(manager_key: str) -> str:
     return f"__hk_last_seq_by_id__::{manager_key}"
 
 
+def _commit_next_key(manager_key: str) -> str:
+    return f"__hk_commit_next__::{manager_key}"
+
+
 def _callbacks_key(manager_key: str) -> str:
     return f"__hk_callbacks__::{manager_key}"
 
@@ -138,7 +142,6 @@ class _EventView:
         last_seen = int(store.get(binding_id, 0))
         current = self.seq
         if current > last_seen:
-            store[binding_id] = current
             return True
         return False
 
@@ -266,33 +269,118 @@ def activate(
         key: str = "global",
         debug: bool = False,
 ) -> None:
-    """
-    Configure and activate the single hotkeys manager (render the iframe once).
+    """Configure and activate the hotkeys manager (render the single invisible iframe).
 
-    Call this early in your app (e.g., in main.py). You can pass:
-      activate(hk(...), hk(...))
-      activate([hk(...), hk(...)] )
-      activate({"save": {"key":"s", "ctrl":True}, "palette": {"key":"k", "meta":True}})
+    Call this **as early as possible** on the page or inside a `@st.fragment`. Once a
+    registered shortcut is pressed, the manager updates its value and **Streamlit
+    reruns** (the whole script, or only that fragment if the manager lives there).
+
+    You can pass bindings as:
+    - positional `hk(...)` dicts,
+    - a single list/tuple of `hk(...)` dicts, or
+    - a mapping: `id -> spec` or `id -> [spec, spec, ...]`.
+
+    Each *spec* may contain:
+    `key`, `code`, `alt`, `ctrl`, `shift`, `meta`, `ignore_repeat`,
+    `prevent_default`, `help`.
+    Duplicate `id`s are allowed (e.g., `Cmd+K` **or** `Ctrl+K` both map to `"palette"`).
 
     Args:
-        *bindings: hk(...) dicts, or a single list of hk dicts, or a single mapping id->spec.
-        key: Manager key (use multiple keys for independent groups if needed).
-        debug: When True, frontend logs match events to the browser console.
+        *bindings: One or more `hk(...)` dicts, a single list/tuple of them,
+            or a mapping of `id -> spec` (or `id -> [spec, ...]`). See examples.
+        key (str): Manager namespace. Events/callbacks are isolated per key.
+            Place the manager inside a fragment with a unique `key` if you want
+            **partial reruns** of that fragment only. Default: `"global"`.
+        debug (bool): If `True`, the frontend logs matches to the browser console.
+            Useful while authoring shortcuts. Default: `False`.
+
+    Example:
+    ```python
+    import streamlit as st
+    import streamlit_hotkeys as hotkeys
+
+    # Page-level manager: the whole script reruns on a press
+    hotkeys.activate([
+        hotkeys.hk("palette", "k", meta=True, help="Open palette (mac)"),
+        hotkeys.hk("palette", "k", ctrl=True, help="Open palette (win/linux)"),
+        hotkeys.hk("save", "s", ctrl=True, prevent_default=True, help="Save"),
+    ], key="global")
+
+    if hotkeys.pressed("palette"):
+        st.info("Palette opened")
+
+    # Fragment-level manager: only this fragment reruns on Ctrl+S
+    @st.fragment
+    def editor():
+        hotkeys.activate([hotkeys.hk("save", "s", ctrl=True)], key="editor")
+        if hotkeys.pressed("save", key="editor"):
+            st.success("Saved (fragment)")
+
+    editor()
+    ```
     """
     preload_css(key=key)
+
+    # Commit any pending seq from the previous run so old events stop firing
+    committed = st.session_state.setdefault(_per_id_seq_key(key), {})
+    pending = st.session_state.get(_commit_next_key(key), {})
+    if isinstance(pending, dict) and pending:
+        for _id, s in pending.items():
+            try:
+                s_int = int(s or 0)
+            except ValueError:
+                s_int = 0
+            if s_int > int(committed.get(_id, 0)):
+                committed[_id] = s_int
+        st.session_state[_commit_next_key(key)] = {}
+
     normalized = _normalize_bindings_args(*bindings)
     st.session_state[_bindings_key(key)] = normalized
     _render_manager(normalized, key=key, debug=debug)
+
+    # Queue the current event for commit on the next run
+    payload = st.session_state.get(_last_event_key(key))
+    if isinstance(payload, dict):
+        _id = payload.get("id")
+        if _id:
+            seq = int(payload.get("seq") or 0)
+            pend = st.session_state.setdefault(_commit_next_key(key), {})
+            prev = int(pend.get(_id, 0))
+            if seq > prev:
+                pend[_id] = seq
+
     _run_callbacks(key)
 
 
 def pressed(binding_id: str, *, key: str = "global") -> bool:
-    """
-    Return True exactly once when the binding `binding_id` fires.
+    """Return True exactly once **per new key press**, without being consumed within the same rerun.
 
-    Requires that `activate(...)` has been called earlier in the same run (or on a prior code path).
-    If not, we'll try to render with the last-known bindings (if any) so the manager exists.
+    Behavior:
+    - Within a single rerun, you can call `pressed(id)` **multiple times** in
+      different places and each call will see `True` for the same event.
+    - On the **next rerun**, the event is committed and `pressed(id)` returns
+      `False` until the user presses the shortcut again.
+    - Requires that `activate(...)` has already run (on this page or fragment).
+
+    Args:
+        binding_id (str): The `id` used when registering the binding(s), e.g. `"save"`.
+            You can map multiple combos to the same `id`.
+        key (str): Manager key used in `activate(...)`. Default: `"global"`.
+
+    Returns:
+        bool: `True` for a new event, otherwise `False`.
+
+    Example:
+        ```python
+        # Both branches run on the same press (same rerun):
+        if hotkeys.pressed("save"):
+            st.info("Thanks for saving")
+
+        if hotkeys.pressed("save"):
+            st.info("Follow-up message")
+        ```
     """
+
     # Ensure the per-id seq store exists
     seq_store = _per_id_seq_key(key)
     if seq_store not in st.session_state:
@@ -311,29 +399,56 @@ def pressed(binding_id: str, *, key: str = "global") -> bool:
     return view.pressed(binding_id)
 
 
+def _cb_sig(fn: Callable) -> tuple:
+    code = getattr(fn, "__code__", None)
+    return (
+        getattr(fn, "__module__", None),
+        getattr(fn, "__qualname__", getattr(fn, "__name__", None)),
+        getattr(code, "co_firstlineno", None),
+        getattr(code, "co_filename", None),
+    )
+
+
 def on_pressed(
     binding_id: str,
-    callback: Callable | None = None,
+    callback: Optional[Callable] = None,
     *,
     key: str = "global",
     args: tuple = (),
     kwargs: Optional[dict] = None,
 ):
-    """
-    Register a callback to run exactly once per press of `binding_id`.
+    """Register a callback to run **once per key press** for the given `binding_id`.
 
-    Usage:
-        hotkeys.on_pressed("save", save_fn)  # simple
-        hotkeys.on_pressed("save", save_fn, args=(42,), kwargs={"force": True})
+    You can register multiple callbacks for the same `id`; they all run (in
+    registration order) once per event. Registrations are **deduped across reruns**
+    by function identity + args/kwargs. Works alongside `pressed()` checks in the
+    same rerun—callbacks run first, then your `pressed()` branches execute.
 
-    Or as a decorator:
+    Args:
+        binding_id (str): The `id` used by the binding(s), e.g. `"save"`.
+        callback (Callable | None): Function to run when the event fires. If omitted,
+            the function can be supplied via decorator style (see example).
+        key (str): Manager key used in `activate(...)`. Default: `"global"`.
+        args (tuple): Positional args passed to the callback. Default: `()`.
+        kwargs (dict | None): Keyword args passed to the callback. Default: `None`.
+
+    Example:
+        ```python
+        def do_save():
+            st.success("Saved!")
+
+        # direct registration
+        hotkeys.on_pressed("save", do_save)
+
+        # decorator registration (second callback on same id)
         @hotkeys.on_pressed("save")
-        def save_fn():
-            ...
+        def toast():
+            st.toast("Save complete")
 
-    Notes:
-      - Works alongside `hotkeys.pressed(...)`.
-      - Safe with duplicate bindings (same id: e.g., Cmd+K or Ctrl+K).
+        # You can still branch with pressed() in the same rerun
+        if hotkeys.pressed("save"):
+            st.info("Thank you for saving")
+        ```
     """
     if not binding_id:
         raise ValueError("on_pressed(): 'binding_id' is required")
@@ -344,21 +459,51 @@ def on_pressed(
 
     def _register(fn: Callable):
         lst = store.setdefault(binding_id, [])
+        sig = (_cb_sig(fn), args, tuple(sorted(kwargs.items())))
+        # dedupe: skip if same fn/args/kwargs already registered
+        for (f_existing, a_existing, kw_existing) in lst:
+            sig_existing = (_cb_sig(f_existing), a_existing, tuple(sorted((kw_existing or {}).items())))
+            if sig_existing == sig:
+                return fn
         lst.append((fn, args, kwargs))
         return fn
 
     if callback is None:
-        # decorator form
-        return _register
+        return _register  # decorator form
     else:
         return _register(callback)
 
 
 def legend(*, key: str = "global") -> None:
-    """
-    Render a simple, grouped legend of the active shortcuts.
-    - Groups multiple bindings that share the same id (e.g., Cmd+K / Ctrl+K).
-    - Shows any 'help' text attached to a binding (first non-empty wins per id).
+    """Render a grouped legend of the active shortcuts for this manager key.
+
+    Shortcuts that share the same `id` (e.g., `Cmd+K` and `Ctrl+K` both mapped to
+    `"palette"`) are merged onto one line. If a binding was created with
+    `help="..."`, the first non-empty help text for that `id` is shown.
+
+    Args:
+        key (str): Manager key used in `activate(...)`. Default: `"global"`.
+
+    Example:
+        ```python
+        import streamlit as st
+        import streamlit_hotkeys as hotkeys
+
+        hotkeys.activate({
+            "palette": [
+                {"key": "k", "meta": True,  "help": "Open command palette"},
+                {"key": "k", "ctrl": True},  # same id, second combo
+            ],
+            "save": {"key": "s", "ctrl": True, "prevent_default": True, "help": "Save document"},
+        }, key="global")
+
+        @st.dialog("Keyboard Shortcuts")
+        def show_shortcuts():
+            hotkeys.legend()
+
+        if hotkeys.pressed("palette"):
+            show_shortcuts()
+        ```
     """
     bindings = st.session_state.get(_bindings_key(key), [])
     if not bindings:
