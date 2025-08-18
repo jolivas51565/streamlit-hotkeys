@@ -460,10 +460,17 @@ def on_pressed(
     def _register(fn: Callable):
         lst = store.setdefault(binding_id, [])
         sig = (_cb_sig(fn), args, tuple(sorted(kwargs.items())))
-        # dedupe: skip if same fn/args/kwargs already registered
-        for (f_existing, a_existing, kw_existing) in lst:
-            sig_existing = (_cb_sig(f_existing), a_existing, tuple(sorted((kw_existing or {}).items())))
+        # dedupe: if same fn/args/kwargs already registered, REPLACE the old entry
+        for i, (f_existing, a_existing, kw_existing) in enumerate(lst):
+            sig_existing = (
+                _cb_sig(f_existing),
+                a_existing,
+                tuple(sorted((kw_existing or {}).items())),
+            )
             if sig_existing == sig:
+                lst[i] = (fn, args, kwargs)  # update with the new function object
+                # If you want latest registration to affect order, move to end:
+                # lst.append(lst.pop(i))
                 return fn
         lst.append((fn, args, kwargs))
         return fn
